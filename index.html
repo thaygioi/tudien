@@ -412,13 +412,21 @@
             }
         }
 
-        // TTS: tiếng Việt và tiếng Cơ Tu đều dùng Web Speech API (cùng giọng nữ vi-VN), tiếng Anh dùng en-US
-        const FEMALE_HINT = ['female', 'nữ', 'zira', 'lan', 'samantha', 'susan', 'karen', 'victoria', 'linda', 'hoài'];
+        // TTS: VN và CT = Google TTS (giọng nữ chuẩn tiếng Việt, ổn định trên Vercel). Fallback = trình duyệt giọng nữ.
+        const FEMALE_HINT = ['female', 'nữ', 'zira', 'lan', 'samantha', 'susan', 'karen', 'victoria', 'linda', 'hoài', 'mai'];
+        const MALE_HINT = ['male', 'nam', 'david', 'mark', 'hữu', 'minh', 'paul', 'daniel', 'james', 'george'];
         let voiceVi = null;
         let voiceEn = null;
+        let googleAudioVi = null;
+
+        function isMaleVoice(voice) {
+            return MALE_HINT.some(h => (voice.name || '').toLowerCase().includes(h));
+        }
 
         function pickFemaleVoice(list) {
-            return list.find(v => FEMALE_HINT.some(h => (v.name || '').toLowerCase().includes(h))) || list[0];
+            const notMale = list.filter(v => !isMaleVoice(v));
+            const listToUse = notMale.length ? notMale : list;
+            return listToUse.find(v => FEMALE_HINT.some(h => (v.name || '').toLowerCase().includes(h))) || listToUse[0];
         }
 
         function loadVoices() {
@@ -432,15 +440,44 @@
         if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
         loadVoices();
         setTimeout(loadVoices, 400);
+        setTimeout(loadVoices, 1500);
 
-        function playSpeech(text, lang) {
+        function playVietnameseWithGoogle(text, onFallback) {
+            const q = (text || '').substring(0, 200);
+            const url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&q=' + encodeURIComponent(q);
+            if (googleAudioVi) { googleAudioVi.pause(); googleAudioVi.onerror = null; googleAudioVi = null; }
+            speechSynthesis.cancel();
+            googleAudioVi = new Audio(url);
+            googleAudioVi.onerror = function() {
+                if (googleAudioVi) { googleAudioVi.onerror = null; googleAudioVi = null; }
+                onFallback();
+            };
+            googleAudioVi.play().catch(function() { onFallback(); });
+        }
+
+        function playWithBrowserVi(text) {
+            loadVoices();
             speechSynthesis.cancel();
             const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = lang.startsWith('vi') ? 'vi-VN' : (lang || 'en-US');
+            msg.lang = 'vi-VN';
             msg.rate = 0.85;
             msg.pitch = 1;
-            const voice = lang.startsWith('vi') ? voiceVi : voiceEn;
-            if (voice) msg.voice = voice;
+            if (voiceVi) msg.voice = voiceVi;
+            speechSynthesis.speak(msg);
+        }
+
+        function playSpeech(text, lang) {
+            if (lang.startsWith('vi')) {
+                playVietnameseWithGoogle(text, function() { playWithBrowserVi(text); });
+                return;
+            }
+            loadVoices();
+            speechSynthesis.cancel();
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.lang = lang || 'en-US';
+            msg.rate = 0.85;
+            msg.pitch = 1;
+            if (voiceEn) msg.voice = voiceEn;
             speechSynthesis.speak(msg);
         }
 
