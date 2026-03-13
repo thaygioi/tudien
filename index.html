@@ -108,6 +108,20 @@
                 <button type="button" onclick="switchMode('flashcard')" id="btnFlash" class="btn btn-outline">🎴 Thẻ học</button>
                 <button type="button" onclick="window.print()" class="btn btn-ghost">🖨️ In</button>
             </div>
+
+            <details class="mt-3 no-print w-full max-w-lg mx-auto text-left">
+                <summary class="text-sm font-semibold text-[var(--text-muted)] cursor-pointer py-2">💡 Mẹo giọng đọc chuẩn, hay hơn</summary>
+                <div class="text-sm text-[var(--text-muted)] bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius)] p-4 mt-1 space-y-2">
+                    <p><strong>Trên Windows:</strong> Vào <strong>Cài đặt</strong> → <strong>Thời gian &amp; ngôn ngữ</strong> → <strong>Giọng nói</strong> → Thêm giọng (chọn <strong>Tiếng Việt</strong>, ví dụ Microsoft Lan). Sau đó tải lại trang.</p>
+                    <p><strong>Trên điện thoại:</strong> Giọng phụ thuộc cài đặt ngôn ngữ/giọng đọc của máy. Có thể cài thêm giọng tiếng Việt trong Cài đặt.</p>
+                    <p class="pt-2 border-t border-[var(--border)]"><strong>Giọng AI (tùy chọn):</strong> Đăng ký key miễn phí tại <a href="https://responsivevoice.org/" target="_blank" rel="noopener" class="text-[var(--primary)] underline">responsivevoice.org</a>, nhập key bên dưới để dùng giọng AI chuẩn.</p>
+                    <div class="flex flex-wrap items-center gap-2 pt-2">
+                        <label class="text-[var(--text)]">Key ResponsiveVoice:</label>
+                        <input type="text" id="rvKey" placeholder="Dán key (tùy chọn)" class="flex-1 min-w-[140px] px-3 py-1.5 text-sm border border-[var(--border)] rounded-[var(--radius-sm)]">
+                        <button type="button" onclick="saveRvKey()" class="btn btn-outline text-sm py-1.5">Lưu</button>
+                    </div>
+                </div>
+            </details>
         </div>
     </header>
 
@@ -147,9 +161,16 @@
         <p id="fcCount" class="mt-3 text-sm text-[var(--text-muted)] font-semibold text-center">Từ 1 / 100</p>
     </main>
 
-    <footer class="container py-6 mt-auto border-t border-[var(--border)] text-center">
-        <p class="font-semibold text-[var(--text)]">Tác giả: A Rất Thưng</p>
-        <p class="text-sm text-[var(--text-muted)] mt-1">Dành tặng cộng đồng học sinh dân tộc Cơ Tu</p>
+    <footer class="container py-8 mt-auto border-t border-[var(--border)] text-center">
+        <p class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Người thực hiện</p>
+        <p class="mt-2 text-xl font-bold text-[var(--primary)]">A Rất Thưng</p>
+        <p class="mt-1 text-base font-medium text-[var(--primary)]">Trái tim dành cho vùng cao</p>
+        <div class="flex justify-center gap-1.5 mt-3" aria-hidden="true">
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--primary-light)]"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--primary)]"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--primary-light)]"></span>
+        </div>
+        <p class="mt-4 text-sm text-[var(--text-muted)] max-w-md mx-auto">Sản phẩm phi lợi nhuận kết hợp cùng ✨ Gemini AI nhằm hỗ trợ công tác giáo dục, bảo tồn tiếng mẹ đẻ của người Cơ Tu.</p>
     </footer>
 
     <script>
@@ -412,12 +433,11 @@
             }
         }
 
-        // TTS: VN và CT = Google TTS (giọng nữ chuẩn tiếng Việt, ổn định trên Vercel). Fallback = trình duyệt giọng nữ.
+        // TTS: chỉ dùng Web Speech API (trình duyệt) — chạy được cả local và Vercel, không bị CORS. VN/CT = giọng nữ vi-VN.
         const FEMALE_HINT = ['female', 'nữ', 'zira', 'lan', 'samantha', 'susan', 'karen', 'victoria', 'linda', 'hoài', 'mai'];
         const MALE_HINT = ['male', 'nam', 'david', 'mark', 'hữu', 'minh', 'paul', 'daniel', 'james', 'george'];
         let voiceVi = null;
         let voiceEn = null;
-        let googleAudioVi = null;
 
         function isMaleVoice(voice) {
             return MALE_HINT.some(h => (voice.name || '').toLowerCase().includes(h));
@@ -442,43 +462,53 @@
         setTimeout(loadVoices, 400);
         setTimeout(loadVoices, 1500);
 
-        function playVietnameseWithGoogle(text, onFallback) {
-            const q = (text || '').substring(0, 200);
-            const url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&q=' + encodeURIComponent(q);
-            if (googleAudioVi) { googleAudioVi.pause(); googleAudioVi.onerror = null; googleAudioVi = null; }
-            speechSynthesis.cancel();
-            googleAudioVi = new Audio(url);
-            googleAudioVi.onerror = function() {
-                if (googleAudioVi) { googleAudioVi.onerror = null; googleAudioVi = null; }
-                onFallback();
-            };
-            googleAudioVi.play().catch(function() { onFallback(); });
+        const RV_KEY_STORAGE = 'tudien_responsivevoice_key';
+        function getRvKey() { try { return localStorage.getItem(RV_KEY_STORAGE) || ''; } catch (e) { return ''; } }
+        function saveRvKey() {
+            var input = document.getElementById('rvKey');
+            var key = (input && input.value) ? input.value.trim() : '';
+            try { if (key) localStorage.setItem(RV_KEY_STORAGE, key); else localStorage.removeItem(RV_KEY_STORAGE); } catch (e) {}
+            loadResponsiveVoiceScript(key);
+        }
+        function loadResponsiveVoiceScript(key) {
+            if (!key) return;
+            if (window.responsiveVoice) return;
+            var s = document.createElement('script');
+            s.src = 'https://code.responsivevoice.org/responsivevoice.js?key=' + encodeURIComponent(key);
+            s.async = true;
+            document.head.appendChild(s);
+        }
+        (function initRvKey() {
+            var k = getRvKey();
+            var el = document.getElementById('rvKey');
+            if (el) el.value = k;
+            if (k) loadResponsiveVoiceScript(k);
+        })();
+
+        function playWithResponsiveVoice(text, lang) {
+            if (!window.responsiveVoice) return false;
+            try {
+                if (lang.startsWith('vi')) window.responsiveVoice.speak(text, 'Vietnamese Female', { rate: 0.9 });
+                else window.responsiveVoice.speak(text, 'US English Female', { rate: 0.9 });
+                return true;
+            } catch (e) { return false; }
         }
 
-        function playWithBrowserVi(text) {
+        function playWithBrowser(text, lang) {
             loadVoices();
             speechSynthesis.cancel();
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'vi-VN';
+            var msg = new SpeechSynthesisUtterance(text);
+            msg.lang = lang.startsWith('vi') ? 'vi-VN' : (lang || 'en-US');
             msg.rate = 0.85;
             msg.pitch = 1;
-            if (voiceVi) msg.voice = voiceVi;
+            var voice = lang.startsWith('vi') ? voiceVi : voiceEn;
+            if (voice) msg.voice = voice;
             speechSynthesis.speak(msg);
         }
 
         function playSpeech(text, lang) {
-            if (lang.startsWith('vi')) {
-                playVietnameseWithGoogle(text, function() { playWithBrowserVi(text); });
-                return;
-            }
-            loadVoices();
-            speechSynthesis.cancel();
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = lang || 'en-US';
-            msg.rate = 0.85;
-            msg.pitch = 1;
-            if (voiceEn) msg.voice = voiceEn;
-            speechSynthesis.speak(msg);
+            if (playWithResponsiveVoice(text, lang)) return;
+            playWithBrowser(text, lang);
         }
 
         function speak(type) {
